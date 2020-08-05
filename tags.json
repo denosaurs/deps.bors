@@ -1,0 +1,13 @@
+[
+  {
+    "label": "encoding",
+    "words": ["encoding", "decoding", "encode", "decode"]
+  },
+  {
+    "label": "compression",
+    "words": ["compression", "decompression", "compress", "decompress"]
+  },
+  { "label": "application", "words": ["application", "app", "install"] },
+  { "label": "discord", "words": ["discord"] },
+  { "label": "parsing", "words": ["parsing", "parser", "tokenizer", "lexer"] }
+]
