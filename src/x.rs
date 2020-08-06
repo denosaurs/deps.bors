@@ -1,11 +1,11 @@
-use std::{collections::HashMap, convert::Into};
+use std::{collections::HashMap, convert::TryInto, env, fs};
 
 use anyhow::Result;
+use log::info;
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 
-use crate::index;
-use log::info;
+use crate::{index, utils};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Module {
@@ -48,22 +48,27 @@ pub struct SearchResult {
   pub star_count: u32,
 }
 
-impl Into<index::Module> for Module {
-  fn into(self) -> index::Module {
-    index::Module {
+impl TryInto<index::Module> for Module {
+  type Error = anyhow::Error;
+  fn try_into(self) -> Result<index::Module> {
+    let versions: Result<Vec<semver::Version>, _> = self
+      .version_info
+      .versions
+      .iter()
+      .map(|v| utils::clean_version(&v))
+      .map(|v| semver::Version::parse(&v))
+      .collect();
+    let versions = versions?;
+    Ok(index::Module {
       name: self.name.clone(),
       desc: self.description.clone(),
-      repo: self
-        .version_meta
-        .and_then(|v| Some(v.upload_options.repository)),
+      repo: match &self.version_meta {
+        Some(meta) => Some(meta.upload_options.repository.clone()),
+        None => None,
+      },
       reg: index::Registry::X,
-      vers: self
-        .version_info
-        .versions
-        .into_iter()
-        .map(|vers| index::Version { vers })
-        .collect(),
-    }
+      vers: versions,
+    })
   }
 }
 
@@ -79,7 +84,7 @@ struct RawResponse<T> {
   data: T,
 }
 
-pub async fn get_page(
+pub async fn fetch_page(
   client: &Client,
   page: &u32,
   limit: &u16,
@@ -113,7 +118,7 @@ pub struct VersionInfo {
   versions: Vec<String>,
 }
 
-pub async fn get_version(
+pub async fn fetch_version_info(
   client: &Client,
   name: &String,
 ) -> Result<VersionInfo> {
@@ -153,7 +158,7 @@ pub struct VersionMetaInfo {
   upload_options: UploadOptions,
 }
 
-pub async fn get_version_meta(
+pub async fn fetch_version_meta(
   client: &Client,
   name: &String,
   version: &String,
@@ -176,39 +181,71 @@ pub async fn get_version_meta(
   Ok(response)
 }
 
-pub async fn get_all_modules(
-  client: &Client,
-) -> Result<HashMap<String, Module>> {
+async fn fetch_all_modules(client: &Client) -> Result<Vec<Module>> {
   let page_id = 1u32;
   let limit = 100;
 
-  let total = get_page(client, &page_id, &limit, None).await?.total_count;
+  let total = fetch_page(client, &page_id, &limit, None)
+    .await?
+    .total_count;
   let total_pages = (total as f32 / limit as f32).ceil() as u32;
 
-  info!("[x] found {} total pages", total_pages);
-
-  let mut modules = HashMap::new();
+  info!("found {} total pages", total_pages);
+  let mut modules = Vec::new();
 
   for page in 1..(total_pages + 1) {
-    let page = get_page(&client, &page, &limit, None).await?;
+    let page = fetch_page(&client, &page, &limit, None).await?;
     for search in page.results {
-      info!("[x] hydrating {}",
-       &search.name);
-      let info = get_version(client, &search.name).await;
+      info!("hydrating {}", &search.name);
+      let info = fetch_version_info(client, &search.name).await;
       if let Ok(info) = info {
-        modules.insert(
-          search.name.clone(),
-          match &info.latest {
-            Some(v) => match get_version_meta(client, &search.name, &v).await {
-              Ok(meta) => Module::from_ext(search, info, meta),
-              Err(_) => Module::from(search, info),
-            },
-            None => Module::from(search, info),
+        modules.push(match &info.latest {
+          Some(v) => match fetch_version_meta(client, &search.name, &v).await {
+            Ok(meta) => Module::from_ext(search, info, meta),
+            Err(_) => Module::from(search, info),
           },
-        );
+          None => Module::from(search, info),
+        });
       }
     }
   }
 
   Ok(modules)
+}
+
+#[cfg(not(debug_assertions))]
+pub async fn get_all(client: &Client) -> Result<Vec<Module>> {
+  Ok(fetch_all_modules(client).await?)
+}
+
+#[cfg(debug_assertions)]
+pub async fn get_all(client: &Client) -> Result<Vec<Module>> {
+  let cwd = env::current_dir()?;
+  let cache = cwd.join(".cache");
+  let file = cache.join("x.json");
+
+  fs::create_dir_all(&cache)?;
+
+  let modules = if !file.exists() {
+    fetch_all_modules(client).await?
+  } else {
+    let raw = fs::read_to_string(&file)?;
+    serde_json::from_str::<Vec<Module>>(&raw)?
+  };
+
+  fs::write(&file, serde_json::to_string(&modules)?)?;
+
+  Ok(modules)
+}
+
+pub async fn get_all_modules(
+  client: &Client,
+) -> Result<HashMap<String, Module>> {
+  let modules = get_all(client).await?;
+  Ok(
+    modules
+      .into_iter()
+      .map(|module| (module.name.clone(), module))
+      .collect(),
+  )
 }

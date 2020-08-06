@@ -5,6 +5,7 @@ on:
 
 jobs:
   build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -17,7 +18,7 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Run cargo test
+      - name: Run cargo build
         uses: actions-rs/cargo@v1
         with:
           command: build
@@ -30,4 +31,4 @@ jobs:
         with:
           draft: true
           files: |
-            target/release/depsbors
+            target/release/bors

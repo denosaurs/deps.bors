@@ -1,16 +1,18 @@
 use std::{
   collections::HashMap,
+  convert::TryInto,
   fmt,
   path::{Path, PathBuf},
 };
 
 use anyhow::Result;
 use reqwest::Client;
+use semver::Version;
 use serde::{Deserialize, Serialize};
 
 use crate::{nest, x};
 
-#[derive(Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Registry {
   X,
@@ -45,28 +47,6 @@ pub struct Module {
   pub vers: Vec<Version>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Version {
-  pub vers: String,
-}
-
-impl Version {
-  pub fn stdv(&self) -> &str {
-    if self.vers.starts_with('v') {
-      &self.vers[1..]
-    } else {
-      &self.vers
-    }
-  }
-}
-
-impl PartialEq for Version {
-  fn eq(&self, other: &Self) -> bool {
-    self.stdv() == other.stdv()
-  }
-}
-impl Eq for Version {}
-
 impl Module {
   pub fn index_path(&self) -> PathBuf {
     let name = &self.name;
@@ -77,7 +57,37 @@ impl Module {
       _ => Path::new(&name[0..2]).join(&name[2..4]).join(name),
     }
   }
+  pub fn get_snapshots(&self) -> Vec<Snapshot> {
+    let mut vers = self.vers.clone();
+    vers.sort();
+    vers
+      .into_iter()
+      .map(|v| Snapshot {
+        name: self.name.clone(),
+        desc: self.desc.clone(),
+        repo: self.repo.clone(),
+        reg: self.reg.clone(),
+        vers: v,
+      })
+      .collect()
+  }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Snapshot {
+  pub name: String,
+  pub desc: Option<String>,
+  pub repo: Option<String>,
+  pub reg: Registry,
+  pub vers: Version,
+}
+
+impl PartialEq for Snapshot {
+  fn eq(&self, other: &Self) -> bool {
+    self.vers.eq(&other.vers)
+  }
+}
+impl Eq for Snapshot {}
 
 pub async fn get_all_modules(
   registry: &Registry,
@@ -87,12 +97,18 @@ pub async fn get_all_modules(
     Registry::X => x::get_all_modules(client)
       .await?
       .into_iter()
-      .map(|(name, module)| (name, module.into()))
+      .filter_map(|(name, module)| match module.try_into() {
+        Ok(module) => Some((name, module)),
+        Err(_) => None,
+      })
       .collect(),
     Registry::Nest => nest::get_all_modules(client)
       .await?
       .into_iter()
-      .map(|(name, module)| (name, module.into()))
+      .filter_map(|(name, module)| match module.try_into() {
+        Ok(module) => Some((name, module)),
+        Err(_) => None,
+      })
       .collect(),
   })
 }
