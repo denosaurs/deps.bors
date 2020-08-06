@@ -28,7 +28,7 @@ impl TryInto<index::Module> for Module {
     let versions: Result<Vec<semver::Version>, _> = self
       .package_upload_names
       .iter()
-      .filter_map(|v| utils::version(&v))
+      .filter_map(|v| utils::at_version(&v))
       .map(|v| semver::Version::parse(&v))
       .collect();
     let versions = versions?;

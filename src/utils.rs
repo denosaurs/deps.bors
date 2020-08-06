@@ -1,4 +1,4 @@
-pub fn version(value: &str) -> Option<&str> {
+pub fn at_version(value: &str) -> Option<&str> {
   let vec: Vec<_> = value.split("@").collect();
   vec.get(1).copied().and_then(|w| Some(clean_version(w)))
 }
