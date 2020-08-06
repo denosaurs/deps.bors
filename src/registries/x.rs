@@ -123,7 +123,7 @@ pub struct VersionInfo {
 
 pub async fn fetch_version_info(
   client: &Client,
-  name: &String,
+  name: &str,
 ) -> Result<VersionInfo> {
   let base_url = Url::parse("https://cdn.deno.land/")?;
   let url = base_url
@@ -163,8 +163,8 @@ pub struct VersionMetaInfo {
 
 pub async fn fetch_version_meta(
   client: &Client,
-  name: &String,
-  version: &String,
+  name: &str,
+  version: &str,
 ) -> Result<VersionMetaInfo> {
   let base_url = Url::parse("https://cdn.deno.land/")?;
   let url = base_url

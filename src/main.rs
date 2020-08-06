@@ -44,7 +44,7 @@ async fn run() -> Result<()> {
     let mut new_modules = Vec::new();
     let mut updated_modules = Vec::new();
 
-    for (_, module) in modules {
+    for module in modules.values_mut() {
       let path = module.index_path();
       let dst = registry_index.join(&path);
 
@@ -59,7 +59,7 @@ async fn run() -> Result<()> {
             snaps.retain(|x| !x.eq(&module))
           }
         }
-        if snaps.len() > 0 {
+        if !snaps.is_empty() {
           updated_modules.push(module);
         }
       } else {
@@ -87,8 +87,7 @@ async fn run() -> Result<()> {
 
 #[tokio::main]
 async fn main() {
-  match run().await {
-    Err(e) => eprintln!("{:#?}", e),
-    _ => {}
+  if let Err(e) = run().await {
+    eprintln!("{:#?}", e)
   }
 }
