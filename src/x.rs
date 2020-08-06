@@ -190,11 +190,10 @@ pub async fn get_all_modules(
   let mut modules = HashMap::new();
 
   for page in 1..(total_pages + 1) {
-    info!("[x] visiting page #{}", page);
     let page = get_page(&client, &page, &limit, None).await?;
-
     for search in page.results {
-      info!("[x] hyrating {}", search.name);
+      info!("[x] hydrating {}",
+       &search.name);
       let info = get_version(client, &search.name).await;
       if let Ok(info) = info {
         modules.insert(
