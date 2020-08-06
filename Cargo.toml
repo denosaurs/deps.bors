@@ -1,6 +1,6 @@
 [package]
 name = "deps_bors"
-version = "0.1.0"
+version = "0.0.1"
 authors = ["Filippo Rossi", "Elias Sjögreen"]
 edition = "2018"
 
