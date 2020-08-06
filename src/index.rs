@@ -1,6 +1,5 @@
 use std::{
   collections::HashMap,
-  convert::TryInto,
   fmt,
   path::{Path, PathBuf},
 };
@@ -10,7 +9,7 @@ use reqwest::Client;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
-use crate::{nest, x};
+use crate::registries::{nest, x};
 
 #[derive(Debug, Hash, Eq, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -94,21 +93,7 @@ pub async fn get_all_modules(
   client: &Client,
 ) -> Result<HashMap<String, Module>> {
   Ok(match registry {
-    Registry::X => x::get_all_modules(client)
-      .await?
-      .into_iter()
-      .filter_map(|(name, module)| match module.try_into() {
-        Ok(module) => Some((name, module)),
-        Err(_) => None,
-      })
-      .collect(),
-    Registry::Nest => nest::get_all_modules(client)
-      .await?
-      .into_iter()
-      .filter_map(|(name, module)| match module.try_into() {
-        Ok(module) => Some((name, module)),
-        Err(_) => None,
-      })
-      .collect(),
+    Registry::X => x::get_module_map(client).await?,
+    Registry::Nest => nest::get_module_map(client).await?,
   })
 }

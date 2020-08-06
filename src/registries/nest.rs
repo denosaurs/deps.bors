@@ -1,8 +1,14 @@
-use crate::{index, utils};
+use std::{collections::HashMap, convert::TryInto};
+
 use anyhow::Result;
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, convert::TryInto, env, fs};
+
+use crate::index;
+
+use log::info;
+#[cfg(debug_assertions)]
+use std::{env, fs};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,7 +34,7 @@ impl TryInto<index::Module> for Module {
     let versions: Result<Vec<semver::Version>, _> = self
       .package_upload_names
       .iter()
-      .filter_map(|v| utils::at_version(&v))
+      .filter_map(|v| super::at_version(&v))
       .map(|v| semver::Version::parse(&v))
       .collect();
     let versions = versions?;
@@ -42,16 +48,19 @@ impl TryInto<index::Module> for Module {
   }
 }
 
-#[cfg(not(debug_assertions))]
-pub async fn get_all(client: &Client) -> Result<Vec<Module>> {
+pub async fn fetch_all_modules(client: &Client) -> Result<Vec<Module>> {
   info!("collecting all modules");
   let url = Url::parse("https://x.nest.land/api/packages")?;
-  let modules = client.get(url).send().await?.json::<Vec<Module>>().await?;
-  Ok(modules)
+  Ok(client.get(url).send().await?.json::<Vec<Module>>().await?)
+}
+
+#[cfg(not(debug_assertions))]
+pub async fn get_all_modules(client: &Client) -> Result<Vec<Module>> {
+  Ok(fetch_all_modules(client).await?)
 }
 
 #[cfg(debug_assertions)]
-pub async fn get_all(client: &Client) -> Result<Vec<Module>> {
+pub async fn get_all_modules(client: &Client) -> Result<Vec<Module>> {
   let cwd = env::current_dir()?;
   let cache = cwd.join(".cache");
   let file = cache.join("nest.json");
@@ -59,8 +68,7 @@ pub async fn get_all(client: &Client) -> Result<Vec<Module>> {
   fs::create_dir_all(&cache)?;
 
   let modules = if !file.exists() {
-    let url = Url::parse("https://x.nest.land/api/packages")?;
-    client.get(url).send().await?.json::<Vec<Module>>().await?
+    fetch_all_modules(client).await?
   } else {
     let raw = fs::read_to_string(&file)?;
     serde_json::from_str::<Vec<Module>>(&raw)?
@@ -71,14 +79,17 @@ pub async fn get_all(client: &Client) -> Result<Vec<Module>> {
   Ok(modules)
 }
 
-pub async fn get_all_modules(
+pub async fn get_module_map(
   client: &Client,
-) -> Result<HashMap<String, Module>> {
-  let response = get_all(client).await?;
+) -> Result<HashMap<String, index::Module>> {
+  let response = get_all_modules(client).await?;
   Ok(
     response
       .into_iter()
-      .map(|module| (module.name.clone(), module))
+      .filter_map(|module| match TryInto::<index::Module>::try_into(module) {
+        Ok(module) => Some((module.name.clone(), module)),
+        Err(_) => None,
+      })
       .collect(),
   )
 }

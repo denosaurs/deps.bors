@@ -1,11 +1,14 @@
-use std::{collections::HashMap, convert::TryInto, env, fs};
+use std::{collections::HashMap, convert::TryInto};
 
 use anyhow::Result;
 use log::info;
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 
-use crate::{index, utils};
+use crate::index;
+
+#[cfg(debug_assertions)]
+use std::{env, fs};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Module {
@@ -55,7 +58,7 @@ impl TryInto<index::Module> for Module {
       .version_info
       .versions
       .iter()
-      .map(|v| utils::clean_version(&v))
+      .map(|v| super::clean_version(&v))
       .map(|v| semver::Version::parse(&v))
       .collect();
     let versions = versions?;
@@ -214,12 +217,12 @@ async fn fetch_all_modules(client: &Client) -> Result<Vec<Module>> {
 }
 
 #[cfg(not(debug_assertions))]
-pub async fn get_all(client: &Client) -> Result<Vec<Module>> {
+pub async fn get_all_modules(client: &Client) -> Result<Vec<Module>> {
   Ok(fetch_all_modules(client).await?)
 }
 
 #[cfg(debug_assertions)]
-pub async fn get_all(client: &Client) -> Result<Vec<Module>> {
+pub async fn get_all_modules(client: &Client) -> Result<Vec<Module>> {
   let cwd = env::current_dir()?;
   let cache = cwd.join(".cache");
   let file = cache.join("x.json");
@@ -238,14 +241,17 @@ pub async fn get_all(client: &Client) -> Result<Vec<Module>> {
   Ok(modules)
 }
 
-pub async fn get_all_modules(
+pub async fn get_module_map(
   client: &Client,
-) -> Result<HashMap<String, Module>> {
-  let modules = get_all(client).await?;
+) -> Result<HashMap<String, index::Module>> {
+  let modules = get_all_modules(client).await?;
   Ok(
     modules
       .into_iter()
-      .map(|module| (module.name.clone(), module))
+      .filter_map(|module| match TryInto::<index::Module>::try_into(module) {
+        Ok(module) => Some((module.name.clone(), module)),
+        Err(_) => None,
+      })
       .collect(),
   )
 }

@@ -1,4 +1,9 @@
+use std::fs::OpenOptions;
 use std::{collections::HashMap, env, fs, io::BufReader};
+use std::{
+  io::{self, BufRead},
+  time::Instant,
+};
 
 use anyhow::Result;
 use clap::{crate_name, crate_version};
@@ -6,17 +11,15 @@ use index::{Registry, Snapshot};
 use io::Write;
 use log::info;
 use reqwest::Client;
-use std::fs::OpenOptions;
-use std::io::{self, BufRead};
 
 mod index;
-mod nest;
-mod utils;
-mod x;
+mod registries;
 
 static APP_USER_AGENT: &str = concat!(crate_name!(), "/", crate_version!());
 
 async fn run() -> Result<()> {
+  let now = Instant::now();
+
   env_logger::Builder::new()
     .filter_level(log::LevelFilter::Info)
     .format_timestamp(None)
@@ -76,6 +79,8 @@ async fn run() -> Result<()> {
     let updated_modules = serde_json::to_string(&updated_modules)?;
     fs::write(registry_index.join("updated.json"), updated_modules)?;
   }
+
+  info!("done, in {}s", now.elapsed().as_secs());
 
   Ok(())
 }
