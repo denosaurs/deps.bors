@@ -58,17 +58,22 @@ impl TryInto<index::Module> for Module {
       .version_info
       .versions
       .iter()
-      .map(|v| super::clean_version(&v))
+      .map(|v| super::utils::clean_version(&v))
       .map(|v| semver::Version::parse(&v))
       .collect();
     let versions = versions?;
+    let repository = match &self.version_meta {
+      // TODO(@qu4k): x omits the github url part, this could be cleaner
+      Some(meta) => Some(format!(
+        "https://github.com/{}",
+        meta.upload_options.repository
+      )),
+      None => None,
+    };
     Ok(index::Module {
-      name: self.name.clone(),
-      desc: self.description.clone(),
-      repo: match &self.version_meta {
-        Some(meta) => Some(meta.upload_options.repository.clone()),
-        None => None,
-      },
+      name: self.name,
+      desc: self.description,
+      repo: repository,
       reg: index::Registry::X,
       vers: versions,
     })
