@@ -138,7 +138,7 @@ impl Registry for X {
     RegistryId::X
   }
   fn name(&self) -> &'static str {
-    return "x";
+    "x"
   }
   fn info(&self) -> RegistryInfo {
     RegistryInfo {

@@ -61,7 +61,7 @@ impl Registry for Nest {
     Box::new(Self { client })
   }
   fn name(&self) -> &'static str {
-    return "nest";
+    "nest"
   }
   fn id(&self) -> RegistryId {
     RegistryId::Nest
