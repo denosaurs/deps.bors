@@ -1,14 +1,16 @@
 use std::{collections::HashMap, convert::TryInto};
 
+#[cfg(debug_assertions)]
+use std::{env, fs};
+
 use anyhow::Result;
+use async_trait::async_trait;
 use log::info;
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 
+use super::{Registry, RegistryId, RegistryInfo};
 use crate::index;
-
-#[cfg(debug_assertions)]
-use std::{env, fs};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Module {
@@ -74,7 +76,7 @@ impl TryInto<index::Module> for Module {
       name: self.name,
       desc: self.description,
       repo: repository,
-      reg: index::Registry::X,
+      reg: RegistryId::X,
       vers: versions,
     })
   }
@@ -92,53 +94,10 @@ struct RawResponse<T> {
   data: T,
 }
 
-pub async fn fetch_page(
-  client: &Client,
-  page: &u32,
-  limit: &u16,
-  query: Option<&String>,
-) -> Result<Page> {
-  let base_url = Url::parse("https://api.deno.land/")?;
-  let mut url = base_url.join("modules")?;
-  {
-    let mut query_pairs = url.query_pairs_mut();
-    query_pairs.append_pair("page", &page.to_string());
-    query_pairs.append_pair("limit", &limit.to_string());
-
-    if let Some(query) = query {
-      query_pairs.append_pair("query", &query);
-    }
-  }
-
-  let response = client
-    .get(url)
-    .send()
-    .await?
-    .json::<RawResponse<Page>>()
-    .await?;
-
-  Ok(response.data)
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VersionInfo {
   latest: Option<String>,
   versions: Vec<String>,
-}
-
-pub async fn fetch_version_info(
-  client: &Client,
-  name: &str,
-) -> Result<VersionInfo> {
-  let base_url = Url::parse("https://cdn.deno.land/")?;
-  let url = base_url
-    .join(&format!("{}/", name))
-    .and_then(|url| url.join("meta/"))
-    .and_then(|url| url.join("versions.json"))?;
-
-  let response = client.get(url).send().await?.json::<VersionInfo>().await?;
-
-  Ok(response)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,97 +125,165 @@ pub struct VersionMetaInfo {
   upload_options: UploadOptions,
 }
 
-pub async fn fetch_version_meta(
-  client: &Client,
-  name: &str,
-  version: &str,
-) -> Result<VersionMetaInfo> {
-  let base_url = Url::parse("https://cdn.deno.land/")?;
-  let url = base_url
-    .join(&format!("{}/", name))
-    .and_then(|url| url.join("versions/"))
-    .and_then(|url| url.join(&format!("{}/", version)))
-    .and_then(|url| url.join("meta/"))
-    .and_then(|url| url.join("meta.json"))?;
-
-  let response = client
-    .get(url)
-    .send()
-    .await?
-    .json::<VersionMetaInfo>()
-    .await?;
-
-  Ok(response)
+pub struct X {
+  client: Client,
 }
 
-async fn fetch_all_modules(client: &Client) -> Result<Vec<Module>> {
-  let page_id = 1u32;
-  let limit = 100;
-
-  let total = fetch_page(client, &page_id, &limit, None)
-    .await?
-    .total_count;
-  let total_pages = (total as f32 / limit as f32).ceil() as u32;
-
-  info!("found {} total pages", total_pages);
-  let mut modules = Vec::new();
-
-  for page in 1..(total_pages + 1) {
-    let page = fetch_page(&client, &page, &limit, None).await?;
-    for search in page.results {
-      info!("hydrating {}", &search.name);
-      let info = fetch_version_info(client, &search.name).await;
-      if let Ok(info) = info {
-        modules.push(match &info.latest {
-          Some(v) => match fetch_version_meta(client, &search.name, &v).await {
-            Ok(meta) => Module::from_ext(search, info, meta),
-            Err(_) => Module::from(search, info),
-          },
-          None => Module::from(search, info),
-        });
-      }
+#[async_trait]
+impl Registry for X {
+  fn new(client: Client) -> Box<Self> {
+    Box::new(Self { client })
+  }
+  fn id(&self) -> RegistryId {
+    RegistryId::X
+  }
+  fn name(&self) -> &'static str {
+    return "x";
+  }
+  fn info(&self) -> RegistryInfo {
+    RegistryInfo {
+      raw_url: "https://cdn.deno.land/{name}/versions/{version}/raw/{...rest}"
+        .to_string(),
     }
   }
-
-  Ok(modules)
+  async fn get_modules(&self) -> Result<HashMap<String, crate::Module>> {
+    let modules = self.get_all_modules().await?;
+    Ok(
+      modules
+        .into_iter()
+        .filter_map(|module| match TryInto::<index::Module>::try_into(module) {
+          Ok(module) => Some((module.name.clone(), module)),
+          Err(_) => None,
+        })
+        .collect(),
+    )
+  }
 }
 
-#[cfg(not(debug_assertions))]
-pub async fn get_all_modules(client: &Client) -> Result<Vec<Module>> {
-  Ok(fetch_all_modules(client).await?)
-}
+impl X {
+  pub async fn fetch_page(
+    &self,
+    page: &u32,
+    limit: &u16,
+    query: Option<&String>,
+  ) -> Result<Page> {
+    let base_url = Url::parse("https://api.deno.land/")?;
+    let mut url = base_url.join("modules")?;
+    {
+      let mut query_pairs = url.query_pairs_mut();
+      query_pairs.append_pair("page", &page.to_string());
+      query_pairs.append_pair("limit", &limit.to_string());
 
-#[cfg(debug_assertions)]
-pub async fn get_all_modules(client: &Client) -> Result<Vec<Module>> {
-  let cwd = env::current_dir()?;
-  let cache = cwd.join(".cache");
-  let file = cache.join("x.json");
+      if let Some(query) = query {
+        query_pairs.append_pair("query", &query);
+      }
+    }
 
-  fs::create_dir_all(&cache)?;
+    let response = self
+      .client
+      .get(url)
+      .send()
+      .await?
+      .json::<RawResponse<Page>>()
+      .await?;
 
-  let modules = if !file.exists() {
-    fetch_all_modules(client).await?
-  } else {
-    let raw = fs::read_to_string(&file)?;
-    serde_json::from_str::<Vec<Module>>(&raw)?
-  };
+    Ok(response.data)
+  }
 
-  fs::write(&file, serde_json::to_string(&modules)?)?;
+  pub async fn fetch_version_info(&self, name: &str) -> Result<VersionInfo> {
+    let base_url = Url::parse("https://cdn.deno.land/")?;
+    let url = base_url
+      .join(&format!("{}/", name))
+      .and_then(|url| url.join("meta/"))
+      .and_then(|url| url.join("versions.json"))?;
 
-  Ok(modules)
-}
+    let response = self
+      .client
+      .get(url)
+      .send()
+      .await?
+      .json::<VersionInfo>()
+      .await?;
 
-pub async fn get_module_map(
-  client: &Client,
-) -> Result<HashMap<String, index::Module>> {
-  let modules = get_all_modules(client).await?;
-  Ok(
-    modules
-      .into_iter()
-      .filter_map(|module| match TryInto::<index::Module>::try_into(module) {
-        Ok(module) => Some((module.name.clone(), module)),
-        Err(_) => None,
-      })
-      .collect(),
-  )
+    Ok(response)
+  }
+
+  pub async fn fetch_version_meta(
+    &self,
+    name: &str,
+    version: &str,
+  ) -> Result<VersionMetaInfo> {
+    let base_url = Url::parse("https://cdn.deno.land/")?;
+    let url = base_url
+      .join(&format!("{}/", name))
+      .and_then(|url| url.join("versions/"))
+      .and_then(|url| url.join(&format!("{}/", version)))
+      .and_then(|url| url.join("meta/"))
+      .and_then(|url| url.join("meta.json"))?;
+
+    let response = self
+      .client
+      .get(url)
+      .send()
+      .await?
+      .json::<VersionMetaInfo>()
+      .await?;
+
+    Ok(response)
+  }
+
+  async fn fetch_all_modules(&self) -> Result<Vec<Module>> {
+    let page_id = 1u32;
+    let limit = 100;
+
+    let total = self.fetch_page(&page_id, &limit, None).await?.total_count;
+    let total_pages = (total as f32 / limit as f32).ceil() as u32;
+
+    info!("found {} total pages", total_pages);
+    let mut modules = Vec::new();
+
+    for page in 1..(total_pages + 1) {
+      let page = self.fetch_page(&page, &limit, None).await?;
+      for search in page.results {
+        info!("hydrating {}", &search.name);
+        let info = self.fetch_version_info(&search.name).await;
+        if let Ok(info) = info {
+          modules.push(match &info.latest {
+            Some(v) => match self.fetch_version_meta(&search.name, &v).await {
+              Ok(meta) => Module::from_ext(search, info, meta),
+              Err(_) => Module::from(search, info),
+            },
+            None => Module::from(search, info),
+          });
+        }
+      }
+    }
+
+    Ok(modules)
+  }
+
+  #[cfg(not(debug_assertions))]
+  pub async fn get_all_modules(&self) -> Result<Vec<Module>> {
+    Ok(self.fetch_all_modules().await?)
+  }
+
+  #[cfg(debug_assertions)]
+  pub async fn get_all_modules(&self) -> Result<Vec<Module>> {
+    let cwd = env::current_dir()?;
+    let cache = cwd.join(".cache");
+    let file = cache.join("x.json");
+
+    fs::create_dir_all(&cache)?;
+
+    let modules = if !file.exists() {
+      self.fetch_all_modules().await?
+    } else {
+      let raw = fs::read_to_string(&file)?;
+      serde_json::from_str::<Vec<Module>>(&raw)?
+    };
+
+    fs::write(&file, serde_json::to_string(&modules)?)?;
+
+    Ok(modules)
+  }
 }

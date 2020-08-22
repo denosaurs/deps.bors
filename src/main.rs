@@ -1,5 +1,5 @@
 use std::fs::OpenOptions;
-use std::{collections::HashMap, env, fs, io::BufReader};
+use std::{env, fs, io::BufReader};
 use std::{
   io::{self, BufRead},
   time::Instant,
@@ -7,13 +7,12 @@ use std::{
 
 use anyhow::Result;
 use clap::{crate_name, crate_version};
-use index::{Registry, Snapshot};
+use index::Snapshot;
 use io::Write;
 use log::info;
 use reqwest::Client;
 
-mod index;
-mod registries;
+use deps::index;
 
 static APP_USER_AGENT: &str = concat!(crate_name!(), "/", crate_version!());
 
@@ -29,18 +28,14 @@ async fn run() -> Result<()> {
 
   let client = Client::builder().user_agent(APP_USER_AGENT).build()?;
 
-  let registries = vec![Registry::X, Registry::Nest];
-  let mut registry_map = HashMap::new();
+  let registries = index::registries(&client);
 
   for registry in registries {
-    info!("gathering modules from {} registry", registry);
-    let modules = index::get_all_modules(&registry, &client).await?;
-    registry_map.insert(registry, modules);
-  }
+    info!("gathering modules from {} registry", registry.name());
+    let mut modules = registry.get_modules().await?;
 
-  for (registry, modules) in &mut registry_map {
-    info!("generating index for `{}` registry", registry);
-    let registry_index = index.join(registry.to_string());
+    info!("generating index for `{}` registry", registry.name());
+    let registry_index = index.join(registry.id().to_string());
     let mut new_modules = Vec::new();
     let mut updated_modules = Vec::new();
 
@@ -74,10 +69,12 @@ async fn run() -> Result<()> {
       }
     }
 
-    let new_modules = serde_json::to_string(&new_modules)?;
-    fs::write(registry_index.join("new.json"), new_modules)?;
-    let updated_modules = serde_json::to_string(&updated_modules)?;
-    fs::write(registry_index.join("updated.json"), updated_modules)?;
+    let serialized = serde_json::to_string(&new_modules)?;
+    fs::write(registry_index.join("new.json"), serialized)?;
+    let serialized = serde_json::to_string(&updated_modules)?;
+    fs::write(registry_index.join("updated.json"), serialized)?;
+    let serialized = serde_json::to_string(&registry.info())?;
+    fs::write(registry_index.join("registry.json"), serialized)?;
   }
 
   info!("done, in {}s", now.elapsed().as_secs());

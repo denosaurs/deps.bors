@@ -1,8 +1,10 @@
 [package]
-name = "deps_bors"
-version = "0.0.1"
+name = "deps"
+version = "0.0.2"
+license = "MIT"
 authors = ["Filippo Rossi", "Elias Sjögreen"]
 edition = "2018"
+repository = "https://github.com/denosaurs/deps.bors"
 
 [[bin]]
 name = "bors"
@@ -16,6 +18,7 @@ env_logger = "0.7"
 
 reqwest = { version = "0.10", features = ["json"] }
 tokio = { version = "0.2", features = ["full"] }
+async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
