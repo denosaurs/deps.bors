@@ -56,12 +56,11 @@ pub struct SearchResult {
 impl TryInto<index::Module> for Module {
   type Error = anyhow::Error;
   fn try_into(self) -> Result<index::Module> {
-    let versions: Result<Vec<semver::Version>, _> = self
+    let versions: Result<Vec<index::Version>, _> = self
       .version_info
       .versions
       .iter()
-      .map(|v| super::utils::clean_version(&v))
-      .map(|v| semver::Version::parse(&v))
+      .map(|v| index::Version::parse(&v))
       .collect();
     let versions = versions?;
     let repository = match &self.version_meta {

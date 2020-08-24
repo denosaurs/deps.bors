@@ -34,11 +34,10 @@ pub struct Module {
 impl TryInto<index::Module> for Module {
   type Error = anyhow::Error;
   fn try_into(self) -> Result<index::Module> {
-    let versions: Result<Vec<semver::Version>, _> = self
+    let versions: Result<Vec<index::Version>, _> = self
       .package_upload_names
       .iter()
-      .filter_map(|v| super::utils::at_version(&v))
-      .map(|v| semver::Version::parse(&v))
+      .map(|v| index::Version::parse(&v))
       .collect();
     let versions = versions?;
     Ok(index::Module {

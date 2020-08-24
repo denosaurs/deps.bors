@@ -1,10 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use reqwest::Client;
-use semver::Version;
 use serde::{Deserialize, Serialize};
 
-use crate::registries::{nest, x, Registry, RegistryId};
+use super::{snapshot::Snapshot, Version};
+use crate::registries::RegistryId;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Module {
@@ -39,24 +38,4 @@ impl Module {
       })
       .collect()
   }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Snapshot {
-  pub name: String,
-  pub desc: Option<String>,
-  pub repo: Option<String>,
-  pub reg: RegistryId,
-  pub vers: Version,
-}
-
-impl PartialEq for Snapshot {
-  fn eq(&self, other: &Self) -> bool {
-    self.vers.eq(&other.vers)
-  }
-}
-impl Eq for Snapshot {}
-
-pub fn registries(client: &Client) -> Vec<Box<dyn Registry>> {
-  vec![x::X::new(client.clone()), nest::Nest::new(client.clone())]
 }
