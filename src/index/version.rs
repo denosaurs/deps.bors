@@ -111,10 +111,7 @@ mod tests {
     fn parse_error(e: &str) -> Result<Version, semver::SemVerError> {
       return Err(semver::SemVerError::ParseError(e.to_string()));
     }
-    assert_eq!(
-      Version::parse(""),
-      parse_error("expected more input")
-    );
+    assert_eq!(Version::parse(""), parse_error("expected more input"));
   }
 
   #[test]
@@ -122,10 +119,7 @@ mod tests {
     fn parse_error(e: &str) -> Result<Version, semver::SemVerError> {
       return Err(semver::SemVerError::ParseError(e.to_string()));
     }
-    assert_eq!(
-      Version::parse(""),
-      parse_error("expected more input")
-    );
+    assert_eq!(Version::parse(""), parse_error("expected more input"));
   }
 
   #[test]
