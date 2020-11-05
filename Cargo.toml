@@ -1,6 +1,6 @@
 [package]
 name = "deps"
-version = "0.0.3"
+version = "0.0.4"
 license = "MIT"
 authors = ["Filippo Rossi", "Elias Sjögreen"]
 edition = "2018"
@@ -15,7 +15,7 @@ clap = "3.0.0-beta.1"
 thiserror = "1.0"
 anyhow = "1.0"
 log = "0.4"
-env_logger = "0.7"
+env_logger = "0.8"
 
 reqwest = { version = "0.10", features = ["json"] }
 tokio = { version = "0.2", features = ["full"] }
@@ -23,4 +23,4 @@ async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-semver = { version = "0.10.0", features = ["serde"] }
+semver = { version = "0.11.0", features = ["serde"] }

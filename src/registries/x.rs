@@ -16,7 +16,7 @@ use crate::index;
 pub struct Module {
   pub name: String,
   pub description: Option<String>,
-  pub star_count: u32,
+  pub star_count: Option<u32>,
   pub version_info: VersionInfo,
   pub version_meta: Option<VersionMetaInfo>,
 }
@@ -50,7 +50,7 @@ impl Module {
 pub struct SearchResult {
   pub name: String,
   pub description: Option<String>,
-  pub star_count: u32,
+  pub star_count: Option<u32>,
 }
 
 impl TryInto<index::Module> for Module {
