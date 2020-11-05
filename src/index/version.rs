@@ -113,7 +113,7 @@ mod tests {
     }
     assert_eq!(
       Version::parse(""),
-      parse_error("Error parsing major identifier")
+      parse_error("expected more input")
     );
   }
 
@@ -124,7 +124,7 @@ mod tests {
     }
     assert_eq!(
       Version::parse(""),
-      parse_error("Error parsing major identifier")
+      parse_error("expected more input")
     );
   }
 
